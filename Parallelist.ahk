@@ -1,5 +1,6 @@
 #NoEnv
 
+;wip: Job.WaitFinish() function
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
 ;wip: restructure library into a class
@@ -27,7 +28,12 @@ Job.Stop()
 Job.Close()
 ExitApp
 
-Space::ParallelistSendData(Job.Workers.1,"abcdef",6 << !!A_IsUnicode)
+Esc::
+DetectHiddenWindows, On
+For Index, Worker In Job.Workers
+ WinKill, ahk_id %Worker%
+ExitApp
+Space::ParallelistSendData(Job.Workers.1,_ := "abcdef",7 << A_IsUnicode)
 
 ShowObject(ShowObject,Padding = "")
 {
@@ -72,8 +78,9 @@ ParallelistAddWorker(This)
  ;incoming message handler
  ParallelistReceiveData(wParam,lParam)
  {
-  Length := NumGet(lParam + 4,0,"UInt")
-  Data := StrGet(NumGet(lParam + 8),Length)
+  Command := NumGet(lParam + 0) ;retrieve the command to perform
+  Length := NumGet(lParam + A_PtrSize,0,"UInt") ;retrieve the length of the data
+  VarSetCapacity(Data,Length), DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(lParam + A_PtrSize + 4),"UInt",Length) ;copy the data into a variable
   MsgBox, Received "`%Data`%" from the main script. `%Length`%
   Return, 1
  }
