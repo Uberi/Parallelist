@@ -17,9 +17,9 @@ Parallelist.Output := "Worker " . WorkerIndex . " has completed the task:``n``n"
 
 Job := ParallelistOpenJob(ScriptCode)
 Job.AddWorker()
-MsgBox % ShowObject(Job)
 ;Job.AddWorker()
 ;Job.RemoveWorker()
+MsgBox % ShowObject(Job)
 Job.Queue := Array("task1","task2","task3","task4","task5","task6","task7","task8","task9")
 Job.Start
 While, Job.Working
@@ -85,7 +85,6 @@ ParallelistAddWorker(This)
   Command := NumGet(lParam + 0) ;retrieve the command to perform
   Length := NumGet(lParam + A_PtrSize,0,"UInt") ;retrieve the length of the data
   VarSetCapacity(Data,Length), DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(lParam + A_PtrSize + 4),"UPtr",Length) ;copy the data into a variable
-  VarSetCapacity(Data,-1)
   MsgBox, Received "`%Data`%" from the main script. `%Length`%
   Return, 1
  }
@@ -103,8 +102,15 @@ ParallelistAddWorker(This)
 }
 
 ParallelistRemoveWorker(This)
-{
- 
+{ ;returns 1 on error, 0 otherwise
+ Workers := This.Workers, Index := ObjMaxIndex(Workers)
+ If Index ;workers are still present
+ {
+  ParallelistCloseWorker(Workers[Index]) ;close the worker
+  ObjRemove(Workers,Index) ;remove the worker from the worker list
+  Return, 0
+ }
+ Return, 1 ;no workers to remove
 }
 
 ParallelistStartJob(This)
