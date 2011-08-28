@@ -28,7 +28,7 @@ Parallelist is based on the following workflow:
 5. Workers send their results back to Parallelist, and receive more tasks if there are any left.
 6. Parallelist collects the data, cleans it up, and presents the results back to the script.
 
-The Parallelist workflow is designed to abstract the complexity of parallelism away from the code, so you can focus more on what the application _does_.
+The Parallelist workflow is designed to abstract the complexity of parallelism away from your code, so you can focus more on what the application _does_.
 
 Usage Example
 -------------
@@ -37,16 +37,30 @@ A simple script that counts the number of lines in all the ".txt" files in a giv
 
     #Include <Parallelist.ahk>
     
-    LineCounter =                            ;set up a line counter program
+    LineCounter =                             ;set up a line counter program
     (
-    FileName := Parallelist.Data             ;retrieve the file name
-    LineCount := 0
-    Loop, Read, %FileName%                   ;loop through each line of the file
+    WorkerInitialize()                        ;initialization callback
     {
-     If A_LoopReadLine Is Not Space          ;if the line is not blank or purely whitespace
-      LineCount ++                           ;increment the line count
+     Return, 0
     }
-    Parallelist.Output := LineCount          ;set the output to the file's line count
+    
+    WorkerProcess()                           ;task callback
+    {
+     FileName := Parallelist.Data             ;retrieve the file name
+     LineCount := 0
+     Loop, Read, %FileName%                   ;loop through each line of the file
+     {
+      If A_LoopReadLine Is Not Space          ;if the line is not blank or purely whitespace
+       LineCount ++                           ;increment the line count
+     }
+     Parallelist.Output := LineCount          ;set the output to the file's line count
+     Return, 0
+    }
+    
+    WorkerUninitialize()                      ;uninitialization callback
+    {
+     Return, 0
+    }
     )
     
     Job := ParallelistOpenJob(LineCounter)   ;open a line counter job
