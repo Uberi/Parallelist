@@ -1,5 +1,7 @@
 #NoEnv
 
+#Warn All
+
 ;wip: Job.WaitFinish() function
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
@@ -29,11 +31,8 @@ Job.Close()
 ExitApp
 
 Esc::
-DetectHiddenWindows, On
-For Index, Worker In Job.Workers
- WinKill, ahk_id %Worker%
+Job.Close()
 ExitApp
-Space::ParallelistSendData(Job.Workers.1,_ := "abcdef",7 << A_IsUnicode)
 
 ShowObject(ShowObject,Padding = "")
 {
@@ -60,7 +59,7 @@ ParallelistOpenJob(ByRef ScriptCode)
 {
  Gui, +LastFound
  hWindow := WinExist() ;get ID of script window
- Return, Object("ScriptCode",ScriptCode,"WindowID",hWindow,"Working",0,"Queue",Array(),"Result",Array(),"Workers",Array(),"AddWorker",Func("ParallelistAddWorker"),"RemoveWorker",Func("ParallelistRemoveWorker"),"Start",Func("ParallelistStartJob"),"Stop",Func("ParallelistStopJob"))
+ Return, Object("ScriptCode",ScriptCode,"WindowID",hWindow,"Working",0,"Queue",Array(),"Result",Array(),"Workers",Array(),"AddWorker",Func("ParallelistAddWorker"),"RemoveWorker",Func("ParallelistRemoveWorker"),"Start",Func("ParallelistStartJob"),"Stop",Func("ParallelistStopJob"),"Close",Func("ParallelistCloseJob"))
 }
 
 ;wip: error check all the DllCall()'s
@@ -73,14 +72,20 @@ ParallelistAddWorker(This)
  #SingleInstance Force
  ParallelistMainWindowID = `%1`% ;retrieve the window ID of the main script
  OnMessage(0x4A,"ParallelistReceiveData") ;WM_COPYDATA
+ OnExit, ExitSub
  Return
+
+ ExitSub:
+ MsgBox, Exiting
+ ExitApp
 
  ;incoming message handler
  ParallelistReceiveData(wParam,lParam)
  {
   Command := NumGet(lParam + 0) ;retrieve the command to perform
   Length := NumGet(lParam + A_PtrSize,0,"UInt") ;retrieve the length of the data
-  VarSetCapacity(Data,Length), DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(lParam + A_PtrSize + 4),"UInt",Length) ;copy the data into a variable
+  VarSetCapacity(Data,Length), DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(lParam + A_PtrSize + 4),"UPtr",Length) ;copy the data into a variable
+  VarSetCapacity(Data,-1)
   MsgBox, Received "`%Data`%" from the main script. `%Length`%
   Return, 1
  }
@@ -91,33 +96,9 @@ ParallelistAddWorker(This)
  ScriptCode .= This.ScriptCode ;insert the script code
 
  ;create a worker process in an idle state
- Suffix := A_IsUnicode ? "W" : "A"
- WorkerIndex := ObjMaxIndex(This.Workers), (WorkerIndex = "") ? (WorkerIndex := 1) : (WorkerIndex ++) ;find the index of the current worker
- PipeName := "\\.\pipe\ParallelistJob" . &This . "Worker" . WorkerIndex ;create a pipe name that is unique across jobs and worker indexes
- hPipe1 := DllCall("CreateNamedPipe" . Suffix,"Str",PipeName,"UInt",2,"UInt",0,"UInt",255,"UInt",0,"UInt",0,"UInt",0,"UInt",0) ;temporary pipe
- hPipe2 := DllCall("CreateNamedPipe" . Suffix,"Str",PipeName,"UInt",2,"UInt",0,"UInt",255,"UInt",0,"UInt",0,"UInt",0,"UInt",0) ;executable pipe
- CodePage := A_IsUnicode ? 1200 : 65001 ;UTF-16 or UTF-8
- Run, % """" . A_AhkPath . """ /CP" . CodePage . " """ . PipeName . """ " . This.WindowID,, UseErrorLevel, WorkerPID ;run the script with the window ID as the parameter
- If ErrorLevel ;could not run the script
- {
-  DllCall("CloseHandle","UPtr",hPipe1), DllCall("CloseHandle","UPtr",hPipe2) ;close the created pipes
+ If ParallelistOpenWorker(This,ScriptCode,hWorker) ;could not start worker
   Return, 1
- }
- DllCall("ConnectNamedPipe","UPtr",hPipe1,"UPtr",0), DllCall("CloseHandle","UPtr",hPipe1) ;use temporary pipe
- DllCall("ConnectNamedPipe","UPtr",hPipe2,"UPtr",0), DllCall("WriteFile","UPtr",hPipe2,"UPtr",&ScriptCode,"UInt",StrLen(ScriptCode) << !!A_IsUnicode,"UPtr",0,"UPtr",0), DllCall("CloseHandle","UPtr",hPipe2) ;send the script code
- DetectHidden := A_DetectHiddenWindows
- DetectHiddenWindows, On
- WinWait, ahk_pid %WorkerPID%,, 5 ;wait up to five seconds for the script to start
- If ErrorLevel ;could not find the worker
- {
-  DetectHiddenWindows, %DetectHidden%
-  Return, 1
- }
- hWindow := WinExist("ahk_pid " . WorkerPID)
- DetectHiddenWindows, %DetectHidden%
- If !hWindow ;could not find worker's main window
-  Return, 1
- ObjInsert(This.Workers,WorkerIndex,hWindow)
+ ObjInsert(This.Workers,hWorker) ;append the worker to the worker array
  Return, 0
 }
 
@@ -142,21 +123,8 @@ ParallelistStopJob(This)
 
 ParallelistCloseJob(This)
 {
- ;For Index, Worker In This.Workers
-  ;wip: execute an exitapp on the worker so they can run their OnExit routines
+ For Index, hWorker In This.Workers
+  ParallelistCloseWorker(hWorker)
 }
 
-ParallelistSendData(hWindow,ByRef Data,DataSize) ;wip: not sure if the Ptr type is right for the CopyDataStruct, also check the receiver too
-{ ;returns 1 on error, 0 otherwise
- VarSetCapacity(CopyData,4 + (A_PtrSize << 1),0) ;an integer and two pointer sized fields
- NumPut(DataSize,CopyData,0)
- NumPut(DataSize,CopyData,A_PtrSize,"UInt")
- NumPut(&Data,CopyData,A_PtrSize << 1)
- DetectHidden := A_DetectHiddenWindows
- DetectHiddenWindows, On
- SendMessage, 0x4A, 0, &CopyData,, ahk_id %hWindow% ;send a WM_COPYDATA message to the script
- DetectHiddenWindows, %DetectHidden%
- If (ErrorLevel = "FAIL") ;could not send the message
-  Return, 1
- Return, 0
-}
+#Include Functions.ahk

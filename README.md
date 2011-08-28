@@ -35,6 +35,8 @@ Usage Example
 
 A simple script that counts the number of lines in all the ".txt" files in a given library, in parallel.
 
+    #Include <Parallelist.ahk>
+    
     LineCounter =                            ;set up a line counter program
     (
     FileName := Parallelist.Data             ;retrieve the file name
