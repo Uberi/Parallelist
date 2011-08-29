@@ -2,7 +2,8 @@
 
 ;#Warn All
 
-;wip: Job.WaitFinish() function that waits for working queue to be empty
+;wip: licensing and headers (AGPLv3)
+;wip: Job.WaitFinish() function that waits for active queue to be empty
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
 ;wip: restructure library into a class
@@ -36,7 +37,7 @@ Job.RemoveWorker()
 Job.Queue := Array("task1","task2","task3","task4","task5","task6","task7","task8","task9")
 Job.Start()
 MsgBox
-While, Job.Working
+While, Job.Working ;wip: not sure if this is still needed
  Sleep, 1
 For Index, Value In Job.Result
  MsgBox Index: %Index%`nValue: %Value%
@@ -44,23 +45,28 @@ Job.Stop()
 Job.Close()
 ExitApp
 
-Space::ParallelistSendData(Job.Workers.Idle.1,"Something",10 << !!A_IsUnicode)
+Space::
+hWorker := ObjRemove(Job.Workers.Idle)
+ObjInsert(Job.Workers.Active,hWorker)
+ParallelistSendData(hWorker,"Something",10 << !!A_IsUnicode)
+Return
+
+Tab::MsgBox % WinExist("A") + 0
+
 Esc::
 Job.Close()
 ExitApp
 
 ParallelistOpenJob(ByRef ScriptCode)
 {
- Gui, +LastFound
- hWindow := WinExist() ;get ID of script window
+ ParallelistInitializeMessageHandler()
  Return, Object("ScriptCode",ParallelistGetWorkerTemplate(ScriptCode)
-  ,"WindowID",hWindow
-  ,"Working",0
+  ,"Working",0 ;wip: not sure if still needed
   ,"Queue",Array()
   ,"Result",Array()
   ,"Workers"
    ,Object("Idle",Array()
-   ,"Working",Array())
+   ,"Active",Array())
   ,"AddWorker",Func("ParallelistAddWorker")
   ,"RemoveWorker",Func("ParallelistRemoveWorker")
   ,"Start",Func("ParallelistStartJob")
@@ -78,14 +84,13 @@ ParallelistAddWorker(This)
 
 ParallelistRemoveWorker(This)
 { ;returns 1 on error, 0 otherwise
- Workers := This.Workers.Idle, Index := ObjMaxIndex(Workers)
+ IdleWorkers := This.Workers.Idle, Index := ObjMaxIndex(IdleWorkers)
  If Index ;workers are still present
  {
-  ParallelistCloseWorker(Workers[Index]) ;close the worker
-  ObjRemove(Workers.Idle,Index) ;remove the worker from the worker list
+  ParallelistCloseWorker(IdleWorkers[Index]) ;close the worker
+  ObjRemove(IdleWorkers,Index) ;remove the worker from the worker list
   Return, 0
  }
- 
  Return, 1 ;no workers to remove
 }
 
@@ -98,7 +103,7 @@ ParallelistStartJob(This)
 
 ParallelistStopJob(This)
 {
- For Index, Worker In This.Workers.Working
+ For Index, Worker In This.Workers.Active
   ;wip: send a message to the workers notifying that the job is to be stopped
  This.Working := 0
 }
@@ -107,6 +112,13 @@ ParallelistCloseJob(This)
 {
  For Index, hWorker In This.Workers.Idle
   ParallelistCloseWorker(hWorker)
+}
+
+ParallelistReceiveResult(This,WorkerIndex,ByRef Result,Length)
+{
+ Workers := This.Workers
+ hWorker := Workers.Active[WorkerIndex], ObjRemove(Workers.Active,WorkerIndex), ObjInsert(Workers.Idle,hWorker) ;move the worker entry from the active queue to the idle queue
+ MsgBox % Clipboard := WorkerIndex . "`n" . ShowObject(This)
 }
 
 #Include Functions.ahk
