@@ -1,8 +1,27 @@
 #NoEnv
 
+/*
+Copyright 2011 Anthony Zhang <azhang9@gmail.com>
+
+This file is part of Parallelist. Source code is available at <https://github.com/Uberi/Parallelist>.
+
+Parallelist is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 ;#Warn All
 
-;wip: licensing and headers (AGPLv3)
+;wip: workers keyed by their hWindow's
 ;wip: Job.WaitFinish() function that waits for active queue to be empty
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
@@ -117,6 +136,7 @@ ParallelistCloseJob(This)
 ParallelistReceiveResult(This,WorkerIndex,ByRef Result,Length)
 {
  Workers := This.Workers
+ MsgBox % Result
  hWorker := Workers.Active[WorkerIndex], ObjRemove(Workers.Active,WorkerIndex), ObjInsert(Workers.Idle,hWorker) ;move the worker entry from the active queue to the idle queue
  MsgBox % Clipboard := WorkerIndex . "`n" . ShowObject(This)
 }
