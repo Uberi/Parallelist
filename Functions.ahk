@@ -36,13 +36,15 @@ ParallelistHandleWorkerMessage(WorkerID,pCopyDataStruct)
  ParallelistWorkerLength := NumGet(pCopyDataStruct + A_PtrSize,0,"UInt") ;retrieve the length of the data
  VarSetCapacity(ParallelistWorkerData,ParallelistWorkerLength), DllCall("RtlMoveMemory","UPtr",&ParallelistWorkerData,"UPtr",NumGet(pCopyDataStruct + A_PtrSize + 4),"UPtr",ParallelistWorkerLength) ;copy the data from the structure
 
+ ParallelistWorkerID := WorkerID
+
  SetTimer, ParallelistHandleWorkerMessage, -0
  Return, 1 ;successfully processed result
-}
 
-ParallelistHandleWorkerMessage:
-ParallelistReceiveResult(ParallelistWorkerJob,ParallelistWorkerID,ParallelistWorkerData,ParallelistWorkerLength)
-Return
+ ParallelistHandleWorkerMessage:
+ ParallelistReceiveResult(ParallelistWorkerJob,ParallelistWorkerID,ParallelistWorkerData,ParallelistWorkerLength)
+ Return
+}
 
 ;sends data to a window
 ParallelistSendData(hWorker,ByRef Data,DataSize) ;window ID, number to be sent, data to be sent, length of the data in bytes
@@ -99,5 +101,5 @@ ParallelistCloseWorker(hWorker)
  WinWaitClose, ahk_id %hWorker%,, 1
  CloseError := ErrorLevel
  DetectHiddenWindows, %DetectHidden%
- Return, !!CloseError
+ Return, CloseError
 }

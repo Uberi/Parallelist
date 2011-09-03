@@ -65,17 +65,15 @@ Job.Close()
 ExitApp
 
 Tab::
-If !ObjNewEnum(Job.Workers.Idle).Next(hWorker)
- Return ;no idle workers available
-Job.Workers.Active[hWorker] := 0
 Counter ++, Temp1 := "Something" . Counter
-ParallelistSendData(hWorker,Temp1,StrLen(Temp1) << !!A_IsUnicode)
+ParallelistAssignTask(Job,Counter,Temp1,StrLen(Temp1) << !!A_IsUnicode)
 Return
 
 Esc::
 Job.Close()
 ExitApp
 
+;creates a job object containing the data, logic, and state
 ParallelistOpenJob(ByRef ScriptCode)
 {
  ParallelistInitializeMessageHandler()
@@ -139,9 +137,16 @@ ParallelistCloseJob(This)
 
 ParallelistReceiveResult(This,hWorker,ByRef Result,Length)
 {
- Workers := This.Workers
- ObjRemove(Workers.Active,hWorker,""), Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
+ ObjRemove(This.Workers.Active,hWorker,""), This.Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
  MsgBox % StrGet(&Result,Length)
+}
+
+ParallelistAssignTask(This,Index,ByRef Data,Length)
+{
+ If !ObjNewEnum(This.Workers.Idle).Next(hWorker) ;retrieve a worker from the idle queue
+  Return, 1 ;no idle workers available
+ ObjRemove(This.Workers.Idle,hWorker,""), This.Workers.Active[hWorker] := Index ;move the worker from the idle queue to the active queue
+ Return, ParallelistSendData(hWorker,Data,Length) ;send the task to the worker
 }
 
 #Include Functions.ahk
