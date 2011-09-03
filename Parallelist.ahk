@@ -1,5 +1,7 @@
 #NoEnv
 
+;MsgBox % ComObjGet("winmgmts:root\cimv2:Win32_Processor='cpu0'").CurrentClockSpeed
+
 /*
 Copyright 2011 Anthony Zhang <azhang9@gmail.com>
 
@@ -19,9 +21,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-;#Warn All
-
-;wip: workers keyed by their hWindow's
+;wip: better error checking everywhere any functions.ahk function is called. assume each one is able to fail.
 ;wip: Job.WaitFinish() function that waits for active queue to be empty
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
@@ -39,7 +39,7 @@ WorkerInitialize()
 
 WorkerProcess(ByRef Parallelist)
 { ;returns 1 on error, 0 otherwise
- Parallelist.Output := "Worker " . WorkerIndex . " has completed the task:``n``n""" . Parallelist.Data . """"
+ Parallelist.Output := "Worker has completed the task:``n``n""" . Parallelist.Data . """"
  Return, 0
 }
 
@@ -49,14 +49,14 @@ WorkerUninitialize()
 }
 )
 
+Counter := 0
 Job := ParallelistOpenJob(ScriptCode)
-Job.AddWorker()
-Job.AddWorker()
+Loop, 2
+ Job.AddWorker()
 Job.RemoveWorker()
 Job.Queue := Array("task1","task2","task3","task4","task5","task6","task7","task8","task9")
 Job.Start()
-MsgBox
-While, Job.Working ;wip: not sure if this is still needed
+While, Job.Working
  Sleep, 1
 For Index, Value In Job.Result
  MsgBox Index: %Index%`nValue: %Value%
@@ -64,13 +64,13 @@ Job.Stop()
 Job.Close()
 ExitApp
 
-Space::
-hWorker := ObjRemove(Job.Workers.Idle)
-ObjInsert(Job.Workers.Active,hWorker)
-ParallelistSendData(hWorker,"Something",10 << !!A_IsUnicode)
+Tab::
+If !ObjNewEnum(Job.Workers.Idle).Next(hWorker)
+ Return ;no idle workers available
+Job.Workers.Active[hWorker] := 0
+Counter ++, Temp1 := "Something" . Counter
+ParallelistSendData(hWorker,Temp1,StrLen(Temp1) << !!A_IsUnicode)
 Return
-
-Tab::MsgBox % WinExist("A") + 0
 
 Esc::
 Job.Close()
@@ -97,17 +97,17 @@ ParallelistAddWorker(This)
 { ;returns 1 on error, 0 otherwise
  If ParallelistOpenWorker(This,This.ScriptCode,hWorker) ;could not start worker
   Return, 1
- ObjInsert(This.Workers.Idle,hWorker) ;append the worker to the idle worker array
+ This.Workers.Idle[hWorker] := 0 ;insert the worker into the idle worker array
  Return, 0
 }
 
 ParallelistRemoveWorker(This)
 { ;returns 1 on error, 0 otherwise
- IdleWorkers := This.Workers.Idle, Index := ObjMaxIndex(IdleWorkers)
- If Index ;workers are still present
+ IdleWorkers := This.Workers.Idle
+ If ObjNewEnum(IdleWorkers).Next(hWorker) ;idle workers are still present
  {
-  ParallelistCloseWorker(IdleWorkers[Index]) ;close the worker
-  ObjRemove(IdleWorkers,Index) ;remove the worker from the worker list
+  ParallelistCloseWorker(hWorker) ;close the worker
+  ObjRemove(IdleWorkers,hWorker,"") ;remove the worker from the worker list
   Return, 0
  }
  Return, 1 ;no workers to remove
@@ -115,30 +115,33 @@ ParallelistRemoveWorker(This)
 
 ParallelistStartJob(This)
 {
- For Index, Worker In This.Workers.Idle
+ For hWorker In This.Workers.Idle
   ;wip: send a message to the workers notifying that the job is to be started
  This.Working := 1
 }
 
 ParallelistStopJob(This)
 {
- For Index, Worker In This.Workers.Active
+ For hWorker In This.Workers.Active
   ;wip: send a message to the workers notifying that the job is to be stopped
  This.Working := 0
 }
 
 ParallelistCloseJob(This)
 {
- For Index, hWorker In This.Workers.Idle
-  ParallelistCloseWorker(hWorker)
+ CloseError := 0
+ For hWorker In This.Workers.Idle
+  CloseError := ParallelistCloseWorker(hWorker) || CloseError
+ This.Workers.Idle := Array() ;clear the idle workers array
+ This.Working := 0
+ Return, CloseError
 }
 
-ParallelistReceiveResult(This,WorkerIndex,ByRef Result,Length)
+ParallelistReceiveResult(This,hWorker,ByRef Result,Length)
 {
  Workers := This.Workers
- MsgBox % Result
- hWorker := Workers.Active[WorkerIndex], ObjRemove(Workers.Active,WorkerIndex), ObjInsert(Workers.Idle,hWorker) ;move the worker entry from the active queue to the idle queue
- MsgBox % Clipboard := WorkerIndex . "`n" . ShowObject(This)
+ ObjRemove(Workers.Active,hWorker,""), Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
+ MsgBox % StrGet(&Result,Length)
 }
 
 #Include Functions.ahk
