@@ -48,7 +48,7 @@ class Worker
         DetectHiddenWindows, %DetectHidden%
     }
 
-    Close()
+    __Delete()
     {
         DetectHidden := A_DetectHiddenWindows
         DetectHiddenWindows, On

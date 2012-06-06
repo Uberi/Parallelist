@@ -52,24 +52,19 @@ class Worker
 )
 
 Counter := 0
-Job := ParallelistOpenJob(ScriptCode)
+Job := new Parallelist(ScriptCode)
 Loop, 2
     Job.AddWorker()
 Job.RemoveWorker()
 Job.Queue := ["task1","task2","task3","task4","task5","task6","task7","task8","task9"]
 Job.Start()
 While, Job.Working
- Sleep, 1
+    Sleep, 1
 For Index, Value In Job.Result
- MsgBox Index: %Index%`nValue: %Value%
+    MsgBox Index: %Index%`nValue: %Value%
 Job.Stop()
 Job.Close()
 ExitApp
-
-Tab::
-Counter ++, Temp1 := "Something" . Counter
-ParallelistAssignTask(Job,Counter,Temp1,StrLen(Temp1) << !!A_IsUnicode)
-Return
 
 Esc::
 Job.Close()
@@ -82,17 +77,13 @@ class Parallelist
         ;set up message handler
         OnMessage(0x4A,"ParallelistHandleMessage") ;WM_COPYDATA
         this.WorkerCode := ScriptCode
+        this.Working := False
         Workers := Object()
         Workers.Active := []
         Workers.Idle := []
         this.Workers := Workers
         this.Queue := []
         this.Result := []
-    }
-
-    __Delete()
-    {
-        ;wip
     }
 
     AddWorker()
@@ -103,7 +94,7 @@ class Parallelist
 
     RemoveWorker()
     {
-        MaxIndex := this.Workers.Idle.MaxIndex()
+        MaxIndex := this.Workers.Idle.NewEnum()
         If !MaxIndex ;no idle workers
             throw Exception("No idle workers to remove.")
         this.Workers.Idle[MaxIndex].Close()
@@ -112,12 +103,20 @@ class Parallelist
 
     Start()
     {
-        ;wip
+        this.Working := True
+        For Worker In this.Workers.Idle
+        {
+            ;Worker.Send() ;wip
+        }
     }
 
     Stop()
     {
-        ;wip
+        For Worker In this.Workers.Active
+        {
+            ;wip: send pause message to workers
+        }
+        this.Working := False
     }
 
     #Include Worker.ahk
@@ -126,30 +125,6 @@ class Parallelist
 ParallelistHandleMessage(WorkerID,pCopyDataStruct)
 {
     ;wip
-}
-
-ParallelistStartJob(This)
-{
- For hWorker In This.Workers.Idle
-  ;wip: send a message to the workers notifying that the job is to be started
- This.Working := 1
-}
-
-ParallelistStopJob(This)
-{
- For hWorker In This.Workers.Active
-  ;wip: send a message to the workers notifying that the job is to be stopped
- This.Working := 0
-}
-
-ParallelistCloseJob(This)
-{
- CloseError := 0
- For hWorker In This.Workers.Idle
-  CloseError := ParallelistCloseWorker(hWorker) || CloseError
- This.Workers.Idle := [] ;clear the idle workers array
- This.Working := 0
- Return, CloseError
 }
 
 ParallelistReceiveResult(This,hWorker,ByRef Result,Length)

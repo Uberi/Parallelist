@@ -39,46 +39,38 @@ A simple script that counts the number of lines in all the ".txt" files in a giv
     
     LineCounter =                             ;set up a line counter program
     (
-    WorkerInitialize()                        ;initialization callback
+    class Worker
     {
-     Return, 0
-    }
-    
-    WorkerProcess()                           ;task callback
-    {
-     FileName := Parallelist.Data             ;retrieve the file name
-     LineCount := 0
-     Loop, Read, %FileName%                   ;loop through each line of the file
-     {
-      If A_LoopReadLine Is Not Space          ;if the line is not blank or purely whitespace
-       LineCount ++                           ;increment the line count
-     }
-     Parallelist.Output := LineCount          ;set the output to the file's line count
-     Return, 0
-    }
-    
-    WorkerUninitialize()                      ;uninitialization callback
-    {
-     Return, 0
+        Process(Task)
+        {
+            FileName := Parallelist.Data       ;retrieve the file name
+            LineCount := 0
+            Loop, Read, %FileName%             ;loop through each line of the file
+            {
+                If A_LoopReadLine Is Not Space ;if the line is not blank or purely whitespace
+                LineCount ++                   ;increment the line count
+            }
+            Parallelist.Output := LineCount    ;set the output to the file's line count
+            Return, 0
+        }
     }
     )
     
-    Job := ParallelistOpenJob(LineCounter)   ;open a line counter job
+    Job := new Parallelist(LineCounter)        ;open a line counter job
     Loop, 3
-     Job.AddWorker()                         ;add a worker to the job
-    Job.RemoveWorker()                       ;remove a worker from the job
-    Job.Start()                              ;start execution of the job
+        Job.AddWorker()                        ;add a worker to the job
+    Job.RemoveWorker()                         ;remove a worker from the job
+    Job.Start()                                ;start execution of the job
     
-    Loop, %A_ScriptDir%\Data\*.txt           ;loop through each ".txt" file in the "Data" subfolder of the script directory
-     Job.Queue.Insert(A_LoopFileLongPath)    ;append a task to the queue
-    While, Job.Working                       ;wait for the workers to finish the tasks placed on the queue
-     Sleep, 1
+    Loop, %A_ScriptDir%\Data\*.txt             ;loop through each ".txt" file in the "Data" subfolder of the script directory
+        Job.Queue.Insert(A_LoopFileLongPath)   ;append a task to the queue
+    While, Job.Working                         ;wait for the workers to finish the tasks placed on the queue
+        Sleep, 1
     
-    Job.Stop()                               ;stop the workers after they have completed the task they are currently working on
-    Job.Close()                              ;close the workers
+    Job.Stop()                                 ;stop the workers after they have completed the task they are currently working on
     
     TotalLines := 0
-    FileCount := Job.Result.MaxIndex()       ;get the number of files processed
-    For Index, Value In Job.Result           ;loop through each result
-     TotalLines += Value                     ;add up the number of lines
+    FileCount := Job.Result.MaxIndex()         ;get the number of files processed
+    For Index, Value In Job.Result             ;loop through each result
+        TotalLines += Value                    ;add up the number of lines
     MsgBox, Found %TotalLines% non-blank lines in %FileCount% files.
