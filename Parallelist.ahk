@@ -21,16 +21,17 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-;wip: better error checking everywhere any functions.ahk function is called. assume each one is able to fail.
+#Warn All
+#Warn LocalSameAsGlobal, Off
+
 ;wip: Job.WaitFinish() function that waits for active queue to be empty
 ;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
-;wip: restructure library into a class
 ;wip: restructure IPC to use sockets, so the library works over a network. have the design support multiple partitioners for better scalability. paritioning can be done with BucketIndex := Mod(Hash(Key),BucketCount)
 ;wip: periodically give out heartbeats to detect worker failures and close or cleanup the worker (or detect if it times out processing a task). the master server should log worker and scheduling state to storage periodically, so when master is restarted, it can read in the state again and keep scheduling. worker should wait if the master does not respond, and then send the data again when it receives the new master's startup ping
 ;wip: automatically start up workers based on available processing units. automatically close workers if they take too long to complete a task or stop responding to pings
 
-ScriptCode = 
+WorkerCode = 
 (
 class Worker
 {
@@ -52,7 +53,7 @@ class Worker
 )
 
 Counter := 0
-Job := new Parallelist(ScriptCode)
+Job := new Parallelist(WorkerCode)
 Loop, 2
     Job.AddWorker()
 Job.RemoveWorker()
@@ -76,7 +77,7 @@ class Parallelist
     {
         ;set up message handler
         OnMessage(0x4A,"ParallelistHandleMessage") ;WM_COPYDATA
-        this.WorkerCode := ScriptCode
+        this.WorkerCode := WorkerCode
         this.Working := False
         Workers := Object()
         Workers.Active := []
@@ -88,21 +89,21 @@ class Parallelist
 
     AddWorker()
     {
-        Worker := new this.Worker
-        this.Workers.Idle[Worker] := ""
+        Worker := new this.Worker(this.WorkerCode)
+        this.Workers.Idle[Worker] := 0
     }
 
     RemoveWorker()
     {
-        MaxIndex := this.Workers.Idle.NewEnum()
-        If !MaxIndex ;no idle workers
+        If !this.Workers.Idle.NewEnum().Next(Worker) ;no idle workers
             throw Exception("No idle workers to remove.")
-        this.Workers.Idle[MaxIndex].Close()
-        this.Workers.Idle.Remove(MaxIndex,"")
+        this.Workers.Idle.Remove(Worker)
     }
 
     Start()
     {
+        If !this.Workers.Idle.NewEnum.Next(Worker)
+            throw Exception("No idle workers to start.")
         this.Working := True
         For Worker In this.Workers.Idle
         {
@@ -127,18 +128,8 @@ ParallelistHandleMessage(WorkerID,pCopyDataStruct)
     ;wip
 }
 
-ParallelistReceiveResult(This,hWorker,ByRef Result,Length)
+ParallelistReceiveResult(this,hWorker,ByRef Result,Length)
 {
- ObjRemove(This.Workers.Active,hWorker,""), This.Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
+ ObjRemove(this.Workers.Active,hWorker,""), This.Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
  MsgBox % StrGet(&Result,Length)
 }
-
-ParallelistAssignTask(This,Index,ByRef Data,Length)
-{
- If !ObjNewEnum(This.Workers.Idle).Next(hWorker) ;retrieve a worker from the idle queue
-  Return, 1 ;no idle workers available
- ObjRemove(This.Workers.Idle,hWorker,""), This.Workers.Active[hWorker] := Index ;move the worker from the idle queue to the active queue
- Return, ParallelistSendData(hWorker,Data,Length) ;send the task to the worker
-}
-
-#Include WorkerTemplate.ahk
