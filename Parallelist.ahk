@@ -32,29 +32,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ScriptCode = 
 (
-WorkerInitialize()
-{ ;returns 1 on error, 0 otherwise
- Return, 0
-}
+class Worker
+{
+    __New(hMaster,pJob)
+    {
+        ;startup code goes here, throws exception on error
+    }
 
-WorkerProcess(ByRef Parallelist)
-{ ;returns 1 on error, 0 otherwise
- Parallelist.Output := "Worker has completed the task:``n``n""" . Parallelist.Data . """"
- Return, 0
-}
+    __Delete()
+    {
+        ;cleanup code goes here, throws exception on error
+    }
 
-WorkerUninitialize()
-{ ;returns 1 on error, 0 otherwise
- Return, 0
+    Process(Task)
+    {
+        ;task processing code goes here, throws exception on error
+    }
 }
 )
 
 Counter := 0
 Job := ParallelistOpenJob(ScriptCode)
 Loop, 2
- Job.AddWorker()
+    Job.AddWorker()
 Job.RemoveWorker()
-Job.Queue := Array("task1","task2","task3","task4","task5","task6","task7","task8","task9")
+Job.Queue := ["task1","task2","task3","task4","task5","task6","task7","task8","task9"]
 Job.Start()
 While, Job.Working
  Sleep, 1
@@ -73,42 +75,57 @@ Esc::
 Job.Close()
 ExitApp
 
-;creates a job object containing the data, logic, and state
-ParallelistOpenJob(ByRef ScriptCode)
+class Parallelist
 {
- ParallelistInitializeMessageHandler()
- Return, Object("ScriptCode",ParallelistGetWorkerTemplate(ScriptCode)
-  ,"Working",0 ;wip: not sure if still needed
-  ,"Queue",Array()
-  ,"Result",Array()
-  ,"Workers"
-   ,Object("Idle",Array()
-   ,"Active",Array())
-  ,"AddWorker",Func("ParallelistAddWorker")
-  ,"RemoveWorker",Func("ParallelistRemoveWorker")
-  ,"Start",Func("ParallelistStartJob")
-  ,"Stop",Func("ParallelistStopJob")
-  ,"Close",Func("ParallelistCloseJob"))
+    __New(WorkerCode)
+    {
+        ;set up message handler
+        OnMessage(0x4A,"ParallelistHandleMessage") ;WM_COPYDATA
+        this.WorkerCode := ScriptCode
+        Workers := Object()
+        Workers.Active := []
+        Workers.Idle := []
+        this.Workers := Workers
+        this.Queue := []
+        this.Result := []
+    }
+
+    __Delete()
+    {
+        ;wip
+    }
+
+    AddWorker()
+    {
+        Worker := new this.Worker
+        this.Workers.Idle[Worker] := ""
+    }
+
+    RemoveWorker()
+    {
+        MaxIndex := this.Workers.Idle.MaxIndex()
+        If !MaxIndex ;no idle workers
+            throw Exception("No idle workers to remove.")
+        this.Workers.Idle[MaxIndex].Close()
+        this.Workers.Idle.Remove(MaxIndex,"")
+    }
+
+    Start()
+    {
+        ;wip
+    }
+
+    Stop()
+    {
+        ;wip
+    }
+
+    #Include Worker.ahk
 }
 
-ParallelistAddWorker(This)
-{ ;returns 1 on error, 0 otherwise
- If ParallelistOpenWorker(This,This.ScriptCode,hWorker) ;could not start worker
-  Return, 1
- This.Workers.Idle[hWorker] := 0 ;insert the worker into the idle worker array
- Return, 0
-}
-
-ParallelistRemoveWorker(This)
-{ ;returns 1 on error, 0 otherwise
- IdleWorkers := This.Workers.Idle
- If ObjNewEnum(IdleWorkers).Next(hWorker) ;idle workers are still present
- {
-  ParallelistCloseWorker(hWorker) ;close the worker
-  ObjRemove(IdleWorkers,hWorker,"") ;remove the worker from the worker list
-  Return, 0
- }
- Return, 1 ;no workers to remove
+ParallelistHandleMessage(WorkerID,pCopyDataStruct)
+{
+    ;wip
 }
 
 ParallelistStartJob(This)
@@ -130,7 +147,7 @@ ParallelistCloseJob(This)
  CloseError := 0
  For hWorker In This.Workers.Idle
   CloseError := ParallelistCloseWorker(hWorker) || CloseError
- This.Workers.Idle := Array() ;clear the idle workers array
+ This.Workers.Idle := [] ;clear the idle workers array
  This.Working := 0
  Return, CloseError
 }
@@ -149,5 +166,4 @@ ParallelistAssignTask(This,Index,ByRef Data,Length)
  Return, ParallelistSendData(hWorker,Data,Length) ;send the task to the worker
 }
 
-#Include Functions.ahk
 #Include WorkerTemplate.ahk
