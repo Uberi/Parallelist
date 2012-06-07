@@ -1,14 +1,17 @@
-class Worker
+class LocalWorker
 {
     static WorkerIndex := 0
 
     __New(WorkerCode)
     {
-        this.base.WorkerIndex ++
-
+        ;obtain the code for the worker
         WorkerCode := this.GetWorkerTemplate(WorkerCode)
 
+        ;set up message handler
+        OnMessage(0x4A,"LocalWorkerReceiveData") ;WM_COPYDATA
+
         ;create named pipes to hold the worker code
+        this.base.WorkerIndex ++
         PipeName := "\\.\pipe\ParallelistWorker" . A_ScriptHwnd . "_" . this.base.WorkerIndex ;create a globally unique pipe name
         hTempPipe := DllCall("CreateNamedPipe","Str",PipeName,"UInt",2,"UInt",0,"UInt",255,"UInt",0,"UInt",0,"UInt",0,"UInt",0) ;temporary pipe
         If hTempPipe = -1
@@ -55,7 +58,7 @@ class Worker
         DetectHidden := A_DetectHiddenWindows
         DetectHiddenWindows, On
         WinClose, % "ahk_id " . this.hWorker ;send the WM_CLOSE message to the worker to allow it to clean up
-        WinWaitClose, % "ahk_id " . hWorker ;wait for the worker to close
+        WinWaitClose, % "ahk_id " . this.hWorker ;wait for the worker to close
         DetectHiddenWindows, %DetectHidden%
     }
 
@@ -66,17 +69,22 @@ class Worker
 
         ;set up the COPYDATASTRUCT structure
         VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
-        ;NumPut(0,CopyDataStruct,0) ;set data type ;wip: not needed
+        ;NumPut(0,CopyDataStruct) ;set data type ;wip: not needed
         NumPut(Length,CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
         NumPut(&Data,CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
 
         ;send the data to the worker
         DetectHidden := A_DetectHiddenWindows
         DetectHiddenWindows, On
-        SendMessage, 0x4A, 0, &CopyDataStruct,, ahk_id %hWorker% ;send the WM_COPYDATA message to the window
+        SendMessage, 0x4A, 0, &CopyDataStruct,, % "ahk_id " . this.hWorker ;WM_COPYDATA
         DetectHiddenWindows, %DetectHidden%
         If (ErrorLevel = "FAIL") ;could not send the message
             throw Exception("Could not send data to worker.")
+    }
+
+    Receive(ByRef Data,Length)
+    {
+        ;wip
     }
 
     GetWorkerTemplate(WorkerCode)
@@ -86,18 +94,19 @@ class Worker
         ;#NoTrayIcon ;wip: debug
 
         ParallelistMaster = `%1`% ;obtain a handle to the master
-        ParallelistJob = `%2`% ;obtain a handle to the job
+        ParallelistWorkerEntry = `%2`% ;obtain a handle to the master's worker entry
 
         OnMessage(0x4A,"ParallelistWorkerReceiveData") ;WM_COPYDATA
-        OnExit, ParallelistWorkerExitHook ;set up exit routine
 
-        w := new Worker(ParallelistMaster,ParallelistJob)
+        ParallelistWorker := new Worker
         Return
 
-        class ParallelistData
+        ~Esc::ExitApp ;wip: debug
+
+        class ParallelistTask
         {
             static Data := ""
-            static Length := -1
+            static Result := ""
         }
 
         ;incoming message handler
@@ -106,44 +115,56 @@ class Worker
             global ParallelistData
             Length := NumGet(lParam + A_PtrSize,0,"UInt") ;retrieve the length of the data
 
-            ;store the data and its length
-            ParallelistData.SetCapacity("Data",Length)
-            DllCall("RtlMoveMemory","UPtr",Parallelist.GetAddress("Data"),"UPtr",NumGet(lParam + A_PtrSize + 4),"UPtr",Length)
-            Parallelist.Length := Length
+            ;store the data
+            ParallelistTask.SetCapacity("Data",Length)
+            DllCall("RtlMoveMemory","UPtr",ParallelistTask.GetAddress("Data"),"UPtr",NumGet(lParam + A_PtrSize + 4),"UPtr",Length)
 
-            SetTimer, ParallelistWorkerTaskHook, -0 ;dispatch a subroutine to handle the task processing
+            ;clear the result
+            ParallelistTask.Result := ""
+
+            SetTimer, ParallelistProcessTask, -0 ;dispatch a subroutine to handle the task processing
             Return, 1 ;successfully processed data ;wip: allow errors to be returned to the main script
         }
 
-        ParallelistSendResult(hMaster,pData,Length = -1)
-        {
-            ;set up the COPYDATASTRUCT structure
-            VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
-            ;NumPut(0,CopyDataStruct,0) ;insert the job handle
-            NumPut(Length,CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
-            NumPut(&Data,CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
-
-            DetectHidden := A_DetectHiddenWindows
-            DetectHiddenWindows, On
-            SendMessage, 0x4A, A_ScriptHwnd, &CopyData,, ahk_id `%hMaster`% ;send the WM_COPYDATA message to the window
-            DetectHiddenWindows, `%DetectHidden`%
-            If (ErrorLevel = "FAIL") ;could not send the message
-            Return, 1
-            Return, 0
-        }
-
-        ParallelistWorkerTaskHook:
-        Parallelist.OutputLength := -1 ;autodetect length
-        w.Process(Parallelist) ;call the user defined processing function
-        ParallelistSendResult(ParallelistMainWindowID,ParallelistJobID,ObjGetAddress(Parallelist,"Output"),(Parallelist.OutputLength >= 0) ? Parallelist.OutputLength : StrLen(Parallelist.Output))
+        ParallelistProcessTask:
+        ParallelistProcessTask(ParallelistWorker,ParallelistTask,ParallelistWorkerEntry,ParallelistMaster)
         Return
 
-        ParallelistWorkerExitHook:
-        w := ""
-        ExitApp
+        ParallelistProcessTask(Worker,Task,WorkerEntry,Master)
+        {
+            ;process the task
+            Worker.Process(Task)
+
+            ;set up the COPYDATASTRUCT structure
+            VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
+            NumPut(WorkerEntry,CopyDataStruct) ;insert the master's worker entry
+            NumPut(Task.GetCapacity("Result"),CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
+            NumPut(Task.GetAddress("Result"),CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
+
+            ;return the result to the master
+            DetectHidden := A_DetectHiddenWindows
+            DetectHiddenWindows, On
+            SendMessage, 0x4A, 0, &CopyDataStruct,, ahk_id `%Master`% ;WM_COPYDATA
+            DetectHiddenWindows, `%DetectHidden`%
+            If (ErrorLevel = "FAIL") ;could not send data
+                throw Exception("Could not send result to master.")
+        }
 
         %WorkerCode%
         )
         Return, Code
     }
+}
+
+LocalWorkerReceiveData(hWindow,pCopyDataStruct)
+{
+    pWorker := NumGet(pCopyDataStruct + 0) ;retrieve the master's worker entry
+    Length := NumGet(pCopyDataStruct + A_PtrSize,0,"UInt") ;retrieve the length of the data
+
+    ;retrieve the data
+    VarSetCapacity(Data,Length)
+    DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(pCopyDataStruct + A_PtrSize + 4),"UPtr",Length)
+
+    ;process the data
+    Object(pWorker).Receive(Data,Length)
 }

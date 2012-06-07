@@ -35,7 +35,7 @@ WorkerCode =
 (
 class Worker
 {
-    __New(hMaster,pJob)
+    __New()
     {
         ;startup code goes here, throws exception on error
     }
@@ -48,6 +48,7 @@ class Worker
     Process(Task)
     {
         ;task processing code goes here, throws exception on error
+        Task.Result := "Finished " . Task.Data . "."
     }
 }
 )
@@ -73,16 +74,19 @@ ExitApp
 
 class Parallelist
 {
-    __New(WorkerCode)
+    __New(WorkerCode,Worker = "")
     {
-        ;set up message handler
-        OnMessage(0x4A,"ParallelistHandleMessage") ;WM_COPYDATA
+        global LocalWorker
+        If IsObject(Worker)
+            this.Worker := Worker
+        Else
+            this.Worker := LocalWorker
+
         this.WorkerCode := WorkerCode
         this.Working := False
-        Workers := Object()
-        Workers.Active := []
-        Workers.Idle := []
-        this.Workers := Workers
+        this.Workers := Object()
+        this.Workers.Active := Object()
+        this.Workers.Idle := Object()
         this.Queue := []
         this.Result := []
     }
@@ -102,12 +106,13 @@ class Parallelist
 
     Start()
     {
-        If !this.Workers.Idle.NewEnum.Next(Worker)
+        If !this.Workers.Idle.NewEnum().Next(Worker)
             throw Exception("No idle workers to start.")
         this.Working := True
         For Worker In this.Workers.Idle
         {
-            ;Worker.Send() ;wip
+            Task := this.Queue.Remove(1)
+            Worker.Send(Task) ;wip: length
         }
     }
 
@@ -120,16 +125,10 @@ class Parallelist
         this.Working := False
     }
 
-    #Include Worker.ahk
+    Receive(Result)
+    {
+        ;wip
+    }
 }
 
-ParallelistHandleMessage(WorkerID,pCopyDataStruct)
-{
-    ;wip
-}
-
-ParallelistReceiveResult(this,hWorker,ByRef Result,Length)
-{
- ObjRemove(this.Workers.Active,hWorker,""), This.Workers.Idle[hWorker] := 0 ;move the worker entry from the active queue to the idle queue
- MsgBox % StrGet(&Result,Length)
-}
+#Include LocalWorker.ahk
