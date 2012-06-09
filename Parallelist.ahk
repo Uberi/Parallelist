@@ -93,7 +93,7 @@ class Parallelist
 
     AddWorker()
     {
-        Worker := new this.Worker(this.WorkerCode)
+        Worker := new this.Worker(this,this.WorkerCode)
         this.Workers.Idle[Worker] := 0
     }
 
@@ -125,9 +125,11 @@ class Parallelist
         this.Working := False
     }
 
-    Receive(Result)
+    Receive(ByRef Data,Length)
     {
-        ;wip
+        ;wip: need worker entry here so it can be reassigned a task
+        MsgBox % Data
+        Return, "Test"
     }
 }
 

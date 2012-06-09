@@ -2,7 +2,7 @@ class LocalWorker
 {
     static WorkerIndex := 0
 
-    __New(WorkerCode)
+    __New(Job,WorkerCode)
     {
         ;obtain the code for the worker
         WorkerCode := this.GetWorkerTemplate(WorkerCode)
@@ -22,7 +22,7 @@ class LocalWorker
 
         ;start the worker
         CodePage := A_IsUnicode ? 1200 : 65001 ;UTF-16 or UTF-8
-        Run, % """" . A_AhkPath . """ /CP" . CodePage . " """ . PipeName . """ " . A_ScriptHwnd . " " . &this,, UseErrorLevel, WorkerPID
+        Run, % """" . A_AhkPath . """ /CP" . CodePage . " """ . PipeName . """ " . A_ScriptHwnd . " " . &Job . " " . &this,, UseErrorLevel, WorkerPID
         If ErrorLevel
         {
             DllCall("CloseHandle","UPtr",hTempPipe) ;close the temporary pipe
@@ -94,7 +94,8 @@ class LocalWorker
         ;#NoTrayIcon ;wip: debug
 
         ParallelistMaster = `%1`% ;obtain a handle to the master
-        ParallelistWorkerEntry = `%2`% ;obtain a handle to the master's worker entry
+        ParallelistJob = `%2`% ;obtain a handle to the job
+        ParallelistWorkerEntry = `%3`% ;obtain a handle to the master's worker entry
 
         OnMessage(0x4A,"ParallelistWorkerReceiveData") ;WM_COPYDATA
 
@@ -127,17 +128,17 @@ class LocalWorker
         }
 
         ParallelistProcessTask:
-        ParallelistProcessTask(ParallelistWorker,ParallelistTask,ParallelistWorkerEntry,ParallelistMaster)
+        ParallelistProcessTask(ParallelistWorker,ParallelistTask,ParallelistJob,ParallelistWorkerEntry,ParallelistMaster)
         Return
 
-        ParallelistProcessTask(Worker,Task,WorkerEntry,Master)
+        ParallelistProcessTask(Worker,Task,pJob,pWorker,Master)
         {
             ;process the task
             Worker.Process(Task)
 
             ;set up the COPYDATASTRUCT structure
             VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
-            NumPut(WorkerEntry,CopyDataStruct) ;insert the master's worker entry
+            NumPut(pJob,CopyDataStruct) ;insert the master's worker entry
             NumPut(Task.GetCapacity("Result"),CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
             NumPut(Task.GetAddress("Result"),CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
 
@@ -158,7 +159,7 @@ class LocalWorker
 
 LocalWorkerReceiveData(hWindow,pCopyDataStruct)
 {
-    pWorker := NumGet(pCopyDataStruct + 0) ;retrieve the master's worker entry
+    pJob := NumGet(pCopyDataStruct + 0) ;retrieve the master's worker entry
     Length := NumGet(pCopyDataStruct + A_PtrSize,0,"UInt") ;retrieve the length of the data
 
     ;retrieve the data
@@ -166,5 +167,7 @@ LocalWorkerReceiveData(hWindow,pCopyDataStruct)
     DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(pCopyDataStruct + A_PtrSize + 4),"UPtr",Length)
 
     ;process the data
-    Object(pWorker).Receive(Data,Length)
+    Object(pJob).Receive(Data,Length)
+
+    Return, 1
 }
