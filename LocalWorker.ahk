@@ -69,7 +69,7 @@ class LocalWorker
 
         ;set up the COPYDATASTRUCT structure
         VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
-        ;NumPut(0,CopyDataStruct) ;set data type ;wip: not needed
+        NumPut(0,CopyDataStruct) ;set data type
         NumPut(Length,CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
         NumPut(&Data,CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
 
@@ -80,11 +80,6 @@ class LocalWorker
         DetectHiddenWindows, %DetectHidden%
         If (ErrorLevel = "FAIL") ;could not send the message
             throw Exception("Could not send data to worker.")
-    }
-
-    Receive(ByRef Data,Length)
-    {
-        ;wip
     }
 
     GetWorkerTemplate(WorkerCode)
@@ -124,7 +119,7 @@ class LocalWorker
             ParallelistTask.Result := ""
 
             SetTimer, ParallelistProcessTask, -0 ;dispatch a subroutine to handle the task processing
-            Return, 1 ;successfully processed data ;wip: allow errors to be returned to the main script
+            Return, 1 ;successfully processed data ;wip: allow errors to be propagated to the main script
         }
 
         ParallelistProcessTask:

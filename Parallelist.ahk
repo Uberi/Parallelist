@@ -111,8 +111,9 @@ class Parallelist
         this.Working := True
         For Worker In this.Workers.Idle
         {
+            Length := this.Queue.GetCapacity(1)
             Task := this.Queue.Remove(1)
-            Worker.Send(Task) ;wip: length
+            Worker.Send(Task,Length)
         }
     }
 
