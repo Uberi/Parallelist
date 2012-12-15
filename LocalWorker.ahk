@@ -86,7 +86,7 @@ class LocalWorker
     {
         Code = 
         (
-        ;#NoTrayIcon ;wip: debug
+        #NoTrayIcon
 
         ParallelistMaster = `%1`% ;obtain a handle to the master
         ParallelistJob = `%2`% ;obtain a handle to the job
@@ -129,15 +129,25 @@ class LocalWorker
         ParallelistProcessTask(Worker,Task,pJob,pWorker,Master)
         {
             ;process the task
-            Worker.Process(Task)
+            Status := Worker.Process(Task)
+            If Status Is Not Integer
+                throw Exception("Task status is not integer.") ;wip: do something else about it
+
+            ;set up the result structure
+            Length := Task.GetCapacity("Result")
+            VarSetCapacity(ResultStruct,Length + (A_PtrSize * 3)) ;allocate the result structure
+            NumPut(pJob,ResultStruct) ;insert the address of the job
+            NumPut(pWorker,ResultStruct,A_PtrSize) ;insert the address of the worker
+            NumPut(Length,ResultStruct,A_PtrSize * 2) ;insert the length of the data
+            DllCall("RtlMoveMemory","UPtr",&ResultStruct + (A_PtrSize * 3),"UPtr",Task.GetAddress("Result"),"UPtr",Length) ;copy data to the result structure
 
             ;set up the COPYDATASTRUCT structure
             VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
-            NumPut(pJob,CopyDataStruct) ;insert the master's worker entry
-            NumPut(Task.GetCapacity("Result"),CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
-            NumPut(Task.GetAddress("Result"),CopyDataStruct,A_PtrSize << 1) ;insert the address of the data to be sent
+            NumPut(Status,CopyDataStruct) ;insert the task status
+            NumPut(Length,CopyDataStruct,A_PtrSize,"UInt") ;insert the length of the data to be sent
+            NumPut(&ResultStruct,CopyDataStruct,A_PtrSize << 1) ;insert the address of the result structure
 
-            ;return the result to the master
+            ;send the result to the master
             DetectHidden := A_DetectHiddenWindows
             DetectHiddenWindows, On
             SendMessage, 0x4A, 0, &CopyDataStruct,, ahk_id `%Master`% ;WM_COPYDATA
@@ -154,15 +164,21 @@ class LocalWorker
 
 LocalWorkerReceiveData(hWindow,pCopyDataStruct)
 {
-    pJob := NumGet(pCopyDataStruct + 0) ;retrieve the master's worker entry
-    Length := NumGet(pCopyDataStruct + A_PtrSize,0,"UInt") ;retrieve the length of the data
+    Status := NumGet(pCopyDataStruct + 0) ;retrieve the status of the task
+    Size := NumGet(pCopyDataStruct + A_PtrSize,0,"UInt") ;retrieve the size of the structure
 
     ;retrieve the data
+    pResultStruct := NumGet(pCopyDataStruct + A_PtrSize + 4)
+    pJob := NumGet(pResultStruct + 0)
+    pWorker := NumGet(pResultStruct + 0,A_PtrSize)
+    Length := NumGet(pResultStruct + 0,A_PtrSize * 2)
     VarSetCapacity(Data,Length)
-    DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",NumGet(pCopyDataStruct + A_PtrSize + 4),"UPtr",Length)
+    DllCall("RtlMoveMemory","UPtr",&Data,"UPtr",pResultStruct + (A_PtrSize * 3),"UPtr",Length)
 
     ;process the data
-    Object(pJob).Receive(Data,Length)
+    Job := Object(pJob)
+    Worker := Object(pWorker)
+    Job.Receive(Worker,Data,Length)
 
     Return, 1
 }

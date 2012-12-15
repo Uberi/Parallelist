@@ -49,6 +49,7 @@ class Worker
     {
         ;task processing code goes here, throws exception on error
         Task.Result := "Finished " . Task.Data . "."
+        Return True
     }
 }
 )
@@ -95,13 +96,15 @@ class Parallelist
     {
         Worker := new this.Worker(this,this.WorkerCode)
         this.Workers.Idle[Worker] := 0
+        Return, this
     }
 
     RemoveWorker()
     {
         If !this.Workers.Idle.NewEnum().Next(Worker) ;no idle workers
-            throw Exception("No idle workers to remove.")
+            throw Exception("No idle workers to remove.") ;wip: stop a worker to do this
         this.Workers.Idle.Remove(Worker)
+        Return, this
     }
 
     Start()
@@ -111,26 +114,41 @@ class Parallelist
         this.Working := True
         For Worker In this.Workers.Idle
         {
+            ;assign a task to the worker
             Length := this.Queue.GetCapacity(1)
-            Task := this.Queue.Remove(1)
+            Task := this.Queue.Remove(1) ;wip: remove the task only after the worker has completed it
             Worker.Send(Task,Length)
         }
+        Return, this
     }
 
     Stop()
     {
         For Worker In this.Workers.Active
         {
-            ;wip: send pause message to workers
+            ;wip: send stop message to workers
         }
         this.Working := False
+        Return, this
     }
 
-    Receive(ByRef Data,Length)
+    Receive(Worker,ByRef Data,Length)
     {
-        ;wip: need worker entry here so it can be reassigned a task
+        ;assign another task to the now idle worker
         MsgBox % Data
-        Return, "Test"
+        ;wip: do something with the data
+        this.Assign(Worker)
+    }
+
+    Assign(Worker)
+    {
+        If !this.Queue.HasKey(1) ;no tasks left
+        {
+            ;wip
+        }
+        Length := this.Queue.GetCapacity(1)
+        Task := this.Queue.Remove(1)
+        Worker.Send(Task,Length)
     }
 }
 
