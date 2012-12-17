@@ -24,12 +24,40 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #Warn All
 #Warn LocalSameAsGlobal, Off
 
-;wip: Job.WaitFinish() function that waits for active queue to be empty
-;wip: singly linked list queue
 ;wip: outputs should be in the same order as the inputs
-;wip: restructure IPC to use sockets, so the library works over a network. have the design support multiple partitioners for better scalability. paritioning can be done with BucketIndex := Mod(Hash(Key),BucketCount)
-;wip: periodically give out heartbeats to detect worker failures and close or cleanup the worker (or detect if it times out processing a task). the master server should log worker and scheduling state to storage periodically, so when master is restarted, it can read in the state again and keep scheduling. worker should wait if the master does not respond, and then send the data again when it receives the new master's startup ping
-;wip: automatically start up workers based on available processing units. automatically close workers if they take too long to complete a task or stop responding to pings
+;wip: have the design support multiple partitioners for better scalability. paritioning can be done with BucketIndex := Mod(Hash(Key),BucketCount)
+;wip: periodically give out heartbeats to detect worker failures and close or cleanup the worker (or detect if it times out processing a task)
+;wip: the master server should log worker and scheduling state to storage periodically, so when master is restarted, it can read in the state again and keep scheduling
+;wip: worker should wait if the master does not respond, and then send the data again when it receives the new master's startup ping
+
+class Queue
+{
+    __New()
+    {
+        ;wip: implement a singly linked list and use it for all queues
+    }
+
+    Peek()
+    {
+        ;wip: return the first element
+        Return, this
+    }
+
+    Pop()
+    {
+        ;wip: remove the first element and return it
+        Return, this
+    }
+
+    Append(Data,Length = -1)
+    {
+        If Length = -1
+            Length := StrLen(Data)
+
+        ;wip: add value to the end of the queue
+        Return, this
+    }
+}
 
 WorkerCode = 
 (
@@ -56,13 +84,9 @@ class Worker
 
 Counter := 0
 Job := new Parallelist(WorkerCode)
-Loop, 2
-    Job.AddWorker()
-Job.RemoveWorker()
+Job.AddWorker().AddWorker().RemoveWorker()
 Job.Queue := ["task1","task2","task3","task4","task5","task6","task7","task8","task9"]
-Job.Start()
-While, Job.Working
-    Sleep, 1
+Job.Start().Wait()
 For Index, Value In Job.Result
     MsgBox Index: %Index%`nValue: %Value%
 Job.Stop()
@@ -122,6 +146,20 @@ class Parallelist
         Return, this
     }
 
+    Wait(Timeout = -1)
+    {
+        If Timeout Is Not Number
+            throw Exception("Timeout must be a number.")
+        StartTime := A_TickCount
+        While, Job.Working
+        {
+            If (Timeout < 0 || (A_TickCount - StartTimer) > Timeout)
+                Break ;wip: give some indication that the operation timed out
+            Sleep, 0
+        }
+        Return, this
+    }
+
     Stop()
     {
         For Worker In this.Workers.Active
@@ -137,18 +175,18 @@ class Parallelist
         ;assign another task to the now idle worker
         MsgBox % Data
         ;wip: do something with the data
-        this.Assign(Worker)
+        this.Update(Worker)
+        Return, this
     }
 
-    Assign(Worker)
+    Update(Worker)
     {
         If !this.Queue.HasKey(1) ;no tasks left
-        {
-            ;wip
-        }
+            Return, this.Stop()
         Length := this.Queue.GetCapacity(1)
         Task := this.Queue.Remove(1)
         Worker.Send(Task,Length)
+        Return, this
     }
 }
 

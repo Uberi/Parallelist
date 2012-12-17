@@ -51,6 +51,7 @@ class LocalWorker
         }
         this.hWorker := WinExist() ;retrieve the worker ID
         DetectHiddenWindows, %DetectHidden%
+        ;wip: check for code failures by using a startup message that also verifies if the IPC is working
     }
 
     __Delete()
@@ -62,11 +63,8 @@ class LocalWorker
         DetectHiddenWindows, %DetectHidden%
     }
 
-    Send(ByRef Data,Length = -1)
+    Send(ByRef Data,Length)
     {
-        If Length = -1
-            Length := StrLen(Data)
-
         ;set up the COPYDATASTRUCT structure
         VarSetCapacity(CopyDataStruct,4 + (A_PtrSize << 1)) ;structure contains an integer field and two pointer sized fields
         NumPut(0,CopyDataStruct) ;set data type
@@ -86,7 +84,7 @@ class LocalWorker
     {
         Code = 
         (
-        #NoTrayIcon
+        ;#NoTrayIcon
 
         ParallelistMaster = `%1`% ;obtain a handle to the master
         ParallelistJob = `%2`% ;obtain a handle to the job
@@ -95,9 +93,9 @@ class LocalWorker
         OnMessage(0x4A,"ParallelistWorkerReceiveData") ;WM_COPYDATA
 
         ParallelistWorker := new Worker
-        Return
 
-        ~Esc::ExitApp ;wip: debug
+        SetTimer, ParallelistCheckStatus, 1000
+        Return
 
         class ParallelistTask
         {
@@ -153,8 +151,19 @@ class LocalWorker
             SendMessage, 0x4A, 0, &CopyDataStruct,, ahk_id `%Master`% ;WM_COPYDATA
             DetectHiddenWindows, `%DetectHidden`%
             If (ErrorLevel = "FAIL") ;could not send data
-                throw Exception("Could not send result to master.")
+                throw Exception("Could not send result to master.") ;wip: do something else about it, like trying to resend data
         }
+
+        ParallelistCheckStatus:
+        ParallelistDetectHidden := A_DetectHiddenWindows
+        DetectHiddenWindows, On
+        If !WinExist("ahk_id " . ParallelistMaster)
+        {
+            DetectHiddenWindows, `%ParallelistDetectHidden`%
+            ExitApp ;wip: do something else about it, like trying to reconnect
+        }
+        DetectHiddenWindows, `%ParallelistDetectHidden`%
+        Return
 
         %WorkerCode%
         )
